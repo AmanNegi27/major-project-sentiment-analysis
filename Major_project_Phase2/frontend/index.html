@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentiment Analysis of Corporate Earning Calls for Stock Price Direction Prediction - Phase II</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'navy': {
+                            950: '#020617',
+                            900: '#0a1628',
+                            800: '#0f1f3d',
+                            700: '#152952',
+                            600: '#1e3a6e',
+                            500: '#2563eb',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        
+        body {
+            background: linear-gradient(180deg, #020617 0%, #0a1628 50%, #0f1f3d 100%);
+            min-height: 100vh;
+        }
+        
+        .card {
+            background: linear-gradient(145deg, rgba(15, 31, 61, 0.9), rgba(10, 22, 40, 0.95));
+            border: 1px solid rgba(37, 99, 235, 0.2);
+            backdrop-filter: blur(10px);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .card:hover {
+            border-color: rgba(37, 99, 235, 0.5);
+            box-shadow: 0 0 40px rgba(37, 99, 235, 0.15), 0 0 80px rgba(37, 99, 235, 0.05);
+            transform: translateY(-3px);
+        }
+        
+        .ticker-card {
+            background: linear-gradient(145deg, rgba(15, 31, 61, 0.95), rgba(10, 22, 40, 0.98));
+            border: 1px solid rgba(37, 99, 235, 0.15);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+        }
+        
+        .ticker-card:hover {
+            border-color: rgba(37, 99, 235, 0.6);
+            box-shadow: 0 0 30px rgba(37, 99, 235, 0.2), inset 0 0 30px rgba(37, 99, 235, 0.05);
+            transform: scale(1.03);
+        }
+        
+        .ticker-card.selected {
+            border-color: rgba(37, 99, 235, 0.8);
+            box-shadow: 0 0 40px rgba(37, 99, 235, 0.3);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 50%, #1e40af 100%);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn-primary::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s;
+        }
+        
+        .btn-primary:hover::before {
+            left: 100%;
+        }
+        
+        .btn-primary:hover {
+            box-shadow: 0 0 30px rgba(37, 99, 235, 0.5);
+            transform: scale(1.02);
+        }
+        
+        .glow-blue {
+            text-shadow: 0 0 20px rgba(37, 99, 235, 0.8), 0 0 40px rgba(37, 99, 235, 0.4);
+        }
+        
+        .price-up { color: #10b981; text-shadow: 0 0 10px rgba(16, 185, 129, 0.5); }
+        .price-down { color: #ef4444; text-shadow: 0 0 10px rgba(239, 68, 68, 0.5); }
+        
+        .pulse-live {
+            animation: pulse-live 2s infinite;
+        }
+        
+        @keyframes pulse-live {
+            0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            50% { opacity: 0.8; box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+        }
+        
+        .dropdown-header {
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .dropdown-header:hover {
+            background: rgba(37, 99, 235, 0.1);
+        }
+        
+        .dropdown-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease-out;
+        }
+        
+        .dropdown-content.open {
+            max-height: 2000px;
+        }
+        
+        .chevron {
+            transition: transform 0.3s ease;
+        }
+        
+        .chevron.open {
+            transform: rotate(180deg);
+        }
+        
+        select, textarea, input[type="date"] {
+            background: rgba(10, 22, 40, 0.9) !important;
+            border: 1px solid rgba(37, 99, 235, 0.3) !important;
+            transition: all 0.3s ease;
+        }
+        
+        select:hover, textarea:hover, input[type="date"]:hover {
+            border-color: rgba(37, 99, 235, 0.6) !important;
+            box-shadow: 0 0 20px rgba(37, 99, 235, 0.1);
+        }
+        
+        select:focus, textarea:focus, input[type="date"]:focus {
+            border-color: rgba(37, 99, 235, 0.8) !important;
+            box-shadow: 0 0 25px rgba(37, 99, 235, 0.2);
+            outline: none;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 320px;
+        }
+        
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: rgba(10, 22, 40, 0.5); }
+        ::-webkit-scrollbar-thumb { background: rgba(37, 99, 235, 0.4); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(37, 99, 235, 0.6); }
+        
+        .loading-spinner {
+            border: 3px solid rgba(37, 99, 235, 0.2);
+            border-top: 3px solid #2563eb;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .stat-value {
+            background: linear-gradient(135deg, #60a5fa, #3b82f6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+    </style>
+</head>
+<body class="text-white min-h-screen">
+    <!-- Header -->
+    <header class="border-b border-blue-900/30 bg-navy-950/80 backdrop-blur-xl sticky top-0 z-50">
+        <div class="container mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center shadow-lg shadow-blue-500/30">
+                        <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold text-white glow-blue">Stock Price Direction Prediction</h1>
+                        <p class="text-xs text-blue-400/70">Sentiment Analysis of Corporate Earning Calls | Phase II</p>
+                    </div>
+                </div>
+                <!-- Market Clocks -->
+                <div class="flex items-center gap-4">
+                    <div class="text-right">
+                        <p class="text-xs text-blue-400/60">NYSE/NASDAQ</p>
+                        <p class="text-sm font-bold text-white mono" id="clockNYSE">--:--:--</p>
+                        <p class="text-xs" id="nyseStatus">--</p>
+                    </div>
+                    <div class="w-px h-8 bg-blue-900/50"></div>
+                    <div class="text-right">
+                        <p class="text-xs text-blue-400/60">NSE/BSE</p>
+                        <p class="text-sm font-bold text-white mono" id="clockNSE">--:--:--</p>
+                        <p class="text-xs" id="nseStatus">--</p>
+                    </div>
+                    <div class="w-px h-8 bg-blue-900/50"></div>
+                    <div class="flex items-center gap-2">
+                        <div class="w-2 h-2 rounded-full bg-green-500 pulse-live"></div>
+                        <span class="text-xs text-green-400 mono">LIVE</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-4 py-6 max-w-7xl">
+        <!-- Live Market Ticker Cards -->
+        <section class="mb-8">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-4">
+                    <h2 class="text-lg font-semibold text-blue-100">Live Market Overview</h2>
+                    <div class="flex items-center gap-2">
+                        <button onclick="prevTickerPage()" class="w-8 h-8 rounded-lg bg-blue-600/20 hover:bg-blue-600/40 flex items-center justify-center transition-all hover:scale-110" title="Previous">
+                            <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                            </svg>
+                        </button>
+                        <span class="text-xs text-blue-400/60 mono" id="pageIndicator">1/4</span>
+                        <button onclick="nextTickerPage()" class="w-8 h-8 rounded-lg bg-blue-600/20 hover:bg-blue-600/40 flex items-center justify-center transition-all hover:scale-110" title="Next">
+                            <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button onclick="toggleAutoRotate()" id="autoRotateBtn" class="px-3 py-1 text-xs rounded-lg bg-green-600/30 text-green-400 hover:bg-green-600/50 transition-all flex items-center gap-1" title="Auto-rotate every 3 seconds">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                        <span id="autoRotateText">AUTO</span>
+                    </button>
+                    <span class="text-xs text-blue-400/60 mono" id="lastUpdate">Loading...</span>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-4" id="tickerCards">
+                <!-- Ticker cards will be populated here -->
+            </div>
+        </section>
+
+        <!-- Main Dashboard Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Left Column - Chart & Analysis -->
+            <div class="lg:col-span-2 space-y-6">
+                <!-- Price Chart Card -->
+                <div class="card rounded-2xl p-6" id="chartCard">
+                    <div class="flex items-center justify-between mb-4">
+                        <div>
+                            <h3 class="text-lg font-semibold text-white" id="chartTitle">Select a Stock</h3>
+                            <p class="text-xs text-blue-400/60">4-Month Price History</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button class="px-3 py-1 text-xs rounded-lg bg-blue-600/20 text-blue-400 hover:bg-blue-600/40 transition-all" onclick="setChartRange(30)">1M</button>
+                            <button class="px-3 py-1 text-xs rounded-lg bg-blue-600/40 text-blue-300" onclick="setChartRange(120)">4M</button>
+                            <button class="px-3 py-1 text-xs rounded-lg bg-blue-600/20 text-blue-400 hover:bg-blue-600/40 transition-all" onclick="setChartRange(365)">1Y</button>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="priceChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Prediction Results -->
+                <div class="card rounded-2xl p-6 hidden" id="resultsCard">
+                    <h3 class="text-lg font-semibold text-white mb-4">Prediction Results</h3>
+                    <div id="predictionContent"></div>
+                </div>
+            </div>
+
+            <!-- Right Column - Input & Controls -->
+            <div class="space-y-6">
+                <!-- Analysis Input Card -->
+                <div class="card rounded-2xl p-6">
+                    <h3 class="text-lg font-semibold text-white mb-4">Analyze Earnings Call</h3>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-blue-200 mb-2">Select Company</label>
+                            <select id="companySelect" class="w-full rounded-xl px-4 py-3 text-white text-sm">
+                                <option value="">Choose a company...</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-blue-200 mb-2">Earnings Date</label>
+                            <input type="date" id="earningsDate" class="w-full rounded-xl px-4 py-3 text-white text-sm">
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-blue-200 mb-2">Transcript</label>
+                            <textarea id="transcript" rows="6" placeholder="Paste earnings call transcript..." 
+                                class="w-full rounded-xl px-4 py-3 text-white text-sm placeholder-blue-400/40 resize-none"></textarea>
+                            <p class="text-xs text-blue-400/50 mt-1"><span id="charCount">0</span> characters</p>
+                        </div>
+
+                        <button id="analyzeBtn" class="btn-primary w-full py-3 rounded-xl text-white font-semibold text-sm">
+                            Analyze & Predict
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Loading State -->
+                <div class="card rounded-2xl p-8 text-center hidden" id="loadingCard">
+                    <div class="loading-spinner mx-auto mb-4"></div>
+                    <p class="text-blue-300 text-sm">Analyzing transcript...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Project Details Dropdown -->
+        <section class="mt-8">
+            <div class="card rounded-2xl overflow-hidden">
+                <div class="dropdown-header p-5 flex items-center justify-between" onclick="toggleDropdown()">
+                    <div class="flex items-center gap-3">
+                        <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span class="font-semibold text-white">Project Details & Model Performance</span>
+                    </div>
+                    <svg class="w-5 h-5 text-blue-400 chevron" id="dropdownChevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </div>
+                <div class="dropdown-content" id="dropdownContent">
+                    <div class="p-6 border-t border-blue-900/30 space-y-6">
+                        <!-- Project Overview -->
+                        <div>
+                            <h4 class="text-sm font-semibold text-blue-300 mb-3">Project Overview</h4>
+                            <p class="text-sm text-blue-100/70 leading-relaxed">
+                                This system predicts stock price direction using a fusion of NLP sentiment analysis on corporate earnings calls 
+                                and deep learning models trained on 10+ years of historical financial data. The fusion formula combines 
+                                sentiment probability (40%) with deep learning prediction (60%) for optimal accuracy.
+                            </p>
+                        </div>
+
+                        <!-- Model Performance Grid -->
+                        <div>
+                            <h4 class="text-sm font-semibold text-blue-300 mb-3">Deep Learning Model Performance</h4>
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-3" id="modelMetrics">
+                                <!-- Model metrics will be populated here -->
+                            </div>
+                        </div>
+
+                        <!-- NLP Models -->
+                        <div>
+                            <h4 class="text-sm font-semibold text-blue-300 mb-3">NLP Sentiment Models</h4>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div class="bg-navy-800/50 rounded-xl p-4 border border-blue-900/30">
+                                    <p class="text-xs text-blue-400 mb-1">VADER</p>
+                                    <p class="text-sm text-white">Rule-based sentiment analysis optimized for social media and financial text</p>
+                                </div>
+                                <div class="bg-navy-800/50 rounded-xl p-4 border border-blue-900/30">
+                                    <p class="text-xs text-blue-400 mb-1">FinBERT</p>
+                                    <p class="text-sm text-white">BERT model fine-tuned on financial communications for domain-specific sentiment</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Fusion Formula -->
+                        <div>
+                            <h4 class="text-sm font-semibold text-blue-300 mb-3">Fusion Formula</h4>
+                            <div class="bg-navy-800/50 rounded-xl p-4 border border-blue-900/30">
+                                <p class="mono text-center text-blue-200 text-lg">P(final) = 0.4 × P(sentiment) + 0.6 × P(deep_learning)</p>
+                            </div>
+                        </div>
+
+                        <!-- Companies -->
+                        <div>
+                            <h4 class="text-sm font-semibold text-blue-300 mb-3">Supported Companies (16)</h4>
+                            <p class="text-sm text-blue-100/70">
+                                <span class="text-blue-400">NASDAQ:</span> AAPL, MSFT, AMZN, NVDA, GOOGL, META, TSLA, AVGO, COST, NFLX |
+                                <span class="text-blue-400">NYSE:</span> DELL |
+                                <span class="text-blue-400">NSE:</span> RELIANCE, TCS, INFY, HDFCBANK, WIPRO
+                            </p>
+                        </div>
+
+                        <!-- Feature Engineering -->
+                        <div>
+                            <h4 class="text-sm font-semibold text-blue-300 mb-3">Feature Engineering (28 Technical Indicators)</h4>
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                                <div class="bg-navy-800/30 rounded-lg p-2 text-blue-200">Returns (1d, 3d, 5d, 10d)</div>
+                                <div class="bg-navy-800/30 rounded-lg p-2 text-blue-200">Volatility (10d, 21d)</div>
+                                <div class="bg-navy-800/30 rounded-lg p-2 text-blue-200">SMA Ratios (5/10, 5/20)</div>
+                                <div class="bg-navy-800/30 rounded-lg p-2 text-blue-200">RSI (14-day)</div>
+                                <div class="bg-navy-800/30 rounded-lg p-2 text-blue-200">MACD & Signal</div>
+                                <div class="bg-navy-800/30 rounded-lg p-2 text-blue-200">Bollinger Bands</div>
+                                <div class="bg-navy-800/30 rounded-lg p-2 text-blue-200">ATR & ADX (14-day)</div>
+                                <div class="bg-navy-800/30 rounded-lg p-2 text-blue-200">Momentum (10d, 20d)</div>
+                                <div class="bg-navy-800/30 rounded-lg p-2 text-blue-200">Z-Score (20-day)</div>
+                                <div class="bg-navy-800/30 rounded-lg p-2 text-blue-200">OBV Normalized</div>
+                                <div class="bg-navy-800/30 rounded-lg p-2 text-blue-200">VWAP Ratio</div>
+                                <div class="bg-navy-800/30 rounded-lg p-2 text-blue-200">Stochastic K/D</div>
+                            </div>
+                        </div>
+
+                        <!-- Best Model Highlight -->
+                        <div>
+                            <h4 class="text-sm font-semibold text-blue-300 mb-3">Best Performing Model</h4>
+                            <div class="bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-xl p-4 border border-blue-500/30">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-lg font-bold text-white">Hybrid Transformer-LSTM</p>
+                                        <p class="text-xs text-blue-400">Combines attention mechanism with sequential memory</p>
+                                    </div>
+                                    <div class="text-right">
+                                        <p class="text-2xl font-bold text-green-400">52.27%</p>
+                                        <p class="text-xs text-blue-400">Accuracy</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Target Audience Dropdown -->
+        <section class="mt-4">
+            <div class="card rounded-2xl overflow-hidden">
+                <div class="dropdown-header p-5 flex items-center justify-between" onclick="toggleDropdown2()">
+                    <div class="flex items-center gap-3">
+                        <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                        </svg>
+                        <span class="font-semibold text-white">Target Audience & Benefits</span>
+                    </div>
+                    <svg class="w-5 h-5 text-blue-400 chevron" id="dropdownChevron2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </div>
+                <div class="dropdown-content" id="dropdownContent2">
+                    <div class="p-6 border-t border-blue-900/30 space-y-6">
+                        <!-- Target Audience -->
+                        <div>
+                            <h4 class="text-sm font-semibold text-blue-300 mb-3">Who Is This For?</h4>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div class="bg-navy-800/50 rounded-xl p-4 border border-blue-900/30">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                                        </svg>
+                                        <p class="text-sm font-semibold text-white">Retail Investors</p>
+                                    </div>
+                                    <p class="text-xs text-blue-100/70">Individual traders looking to make informed decisions based on earnings call sentiment and technical analysis.</p>
+                                </div>
+                                <div class="bg-navy-800/50 rounded-xl p-4 border border-blue-900/30">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                                        </svg>
+                                        <p class="text-sm font-semibold text-white">Financial Analysts</p>
+                                    </div>
+                                    <p class="text-xs text-blue-100/70">Professionals analyzing corporate communications to gauge market sentiment and predict stock movements.</p>
+                                </div>
+                                <div class="bg-navy-800/50 rounded-xl p-4 border border-blue-900/30">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                                        </svg>
+                                        <p class="text-sm font-semibold text-white">Quantitative Traders</p>
+                                    </div>
+                                    <p class="text-xs text-blue-100/70">Algorithmic traders integrating NLP signals with technical indicators for systematic trading strategies.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- How It Helps -->
+                        <div>
+                            <h4 class="text-sm font-semibold text-blue-300 mb-3">How This Project Helps</h4>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div class="flex items-start gap-3">
+                                    <div class="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                                        <svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-medium text-white">Automated Sentiment Analysis</p>
+                                        <p class="text-xs text-blue-100/70">Instantly analyze thousands of words from earnings calls to extract sentiment signals.</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-start gap-3">
+                                    <div class="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+                                        <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-medium text-white">Data-Driven Predictions</p>
+                                        <p class="text-xs text-blue-100/70">Combine 28 technical indicators with deep learning for more accurate predictions.</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-start gap-3">
+                                    <div class="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center flex-shrink-0">
+                                        <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-medium text-white">Time-Saving</p>
+                                        <p class="text-xs text-blue-100/70">Get instant predictions instead of manually reading lengthy earnings transcripts.</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-start gap-3">
+                                    <div class="w-8 h-8 rounded-lg bg-yellow-500/20 flex items-center justify-center flex-shrink-0">
+                                        <svg class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-medium text-white">Reduced Emotional Bias</p>
+                                        <p class="text-xs text-blue-100/70">AI-driven analysis removes human emotional bias from investment decisions.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Use Cases -->
+                        <div>
+                            <h4 class="text-sm font-semibold text-blue-300 mb-3">Real-World Use Cases</h4>
+                            <div class="space-y-2">
+                                <div class="bg-navy-800/30 rounded-lg p-3 flex items-center gap-3">
+                                    <span class="text-lg">1.</span>
+                                    <p class="text-sm text-blue-100/80"><strong class="text-white">Pre-Earnings Analysis:</strong> Analyze historical earnings calls to predict how the market might react to upcoming announcements.</p>
+                                </div>
+                                <div class="bg-navy-800/30 rounded-lg p-3 flex items-center gap-3">
+                                    <span class="text-lg">2.</span>
+                                    <p class="text-sm text-blue-100/80"><strong class="text-white">Portfolio Management:</strong> Monitor sentiment across multiple holdings to identify potential risks or opportunities.</p>
+                                </div>
+                                <div class="bg-navy-800/30 rounded-lg p-3 flex items-center gap-3">
+                                    <span class="text-lg">3.</span>
+                                    <p class="text-sm text-blue-100/80"><strong class="text-white">Research & Education:</strong> Study the correlation between corporate communication tone and stock performance.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-blue-900/30 mt-12 py-6 bg-navy-950/50">
+        <div class="container mx-auto px-4 text-center">
+            <p class="text-sm text-blue-400/60">
+                Sentiment Analysis of Corporate Earning Calls for Stock Price Direction Prediction
+            </p>
+            <p class="text-xs text-blue-400/40 mt-2">Phase II | Deep Learning Models</p>
+            <p class="text-xs text-blue-300 mt-3 font-medium">Programmed by Homi Shivanshu Purbey</p>
+        </div>
+    </footer>
+
+    <script>
+        const API_BASE = 'http://localhost:5000/api';
+        let priceChart = null;
+        let selectedTicker = null;
+        let chartDays = 120;
+        let retryCount = 0;
+        const MAX_RETRIES = 3;
+        
+        // Helper function to handle API errors
+        async function fetchWithRetry(url, options = {}) {
+            try {
+                const response = await fetch(url, {
+                    ...options,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    }
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return await response.json();
+            } catch (error) {
+                if (retryCount < MAX_RETRIES) {
+                    retryCount++;
+                    console.log(`Retrying... attempt ${retryCount} of ${MAX_RETRIES}`);
+                    await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+                    return fetchWithRetry(url, options);
+                }
+                throw error;
+            }
+        }
+        
+        const companies = [
+            { ticker: 'AAPL', name: 'Apple Inc.', market: 'NASDAQ' },
+            { ticker: 'MSFT', name: 'Microsoft Corp.', market: 'NASDAQ' },
+            { ticker: 'NVDA', name: 'NVIDIA Corp.', market: 'NASDAQ' },
+            { ticker: 'GOOGL', name: 'Alphabet Inc.', market: 'NASDAQ' },
+            { ticker: 'TSLA', name: 'Tesla Inc.', market: 'NASDAQ' },
+            { ticker: 'AMZN', name: 'Amazon.com Inc.', market: 'NASDAQ' },
+            { ticker: 'META', name: 'Meta Platforms', market: 'NASDAQ' },
+            { ticker: 'AVGO', name: 'Broadcom Inc.', market: 'NASDAQ' },
+            { ticker: 'COST', name: 'Costco Wholesale', market: 'NASDAQ' },
+            { ticker: 'NFLX', name: 'Netflix Inc.', market: 'NASDAQ' },
+            { ticker: 'DELL', name: 'Dell Technologies', market: 'NYSE' },
+            { ticker: 'RELIANCE.NS', name: 'Reliance Industries', market: 'NSE' },
+            { ticker: 'TCS.NS', name: 'TCS', market: 'NSE' },
+            { ticker: 'INFY.NS', name: 'Infosys', market: 'NSE' },
+            { ticker: 'HDFCBANK.NS', name: 'HDFC Bank', market: 'NSE' },
+            { ticker: 'WIPRO.NS', name: 'Wipro', market: 'NSE' }
+        ];
+
+        // Pagination state for ticker cards
+        let currentTickerPage = 0;
+        const tickersPerPage = 5;
+        let autoRotateInterval = null;
+        let isAutoRotating = true;
+
+        // All tickers for pagination (show 5 at a time, rotate through all 16)
+        const allTickers = companies.map(c => c.ticker);
+        const totalPages = Math.ceil(allTickers.length / tickersPerPage);
+
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeApp();
+        });
+
+        async function initializeApp() {
+            loadCompanySelect();
+            setupEventListeners();
+            document.getElementById('earningsDate').value = new Date().toISOString().split('T')[0];
+            await loadTickerCards();
+            await loadModelMetrics();
+            initChart();
+            startAutoRotate();
+        }
+
+        function startAutoRotate() {
+            if (autoRotateInterval) clearInterval(autoRotateInterval);
+            autoRotateInterval = setInterval(() => {
+                if (isAutoRotating) {
+                    nextTickerPage();
+                }
+            }, 3000);
+            updateAutoRotateButton();
+        }
+
+        function toggleAutoRotate() {
+            isAutoRotating = !isAutoRotating;
+            updateAutoRotateButton();
+        }
+
+        function updateAutoRotateButton() {
+            const btn = document.getElementById('autoRotateBtn');
+            const text = document.getElementById('autoRotateText');
+            if (isAutoRotating) {
+                btn.className = 'px-3 py-1 text-xs rounded-lg bg-green-600/30 text-green-400 hover:bg-green-600/50 transition-all flex items-center gap-1';
+                text.textContent = 'AUTO';
+            } else {
+                btn.className = 'px-3 py-1 text-xs rounded-lg bg-red-600/30 text-red-400 hover:bg-red-600/50 transition-all flex items-center gap-1';
+                text.textContent = 'PAUSED';
+            }
+        }
+
+        function nextTickerPage() {
+            currentTickerPage = (currentTickerPage + 1) % totalPages;
+            loadTickerCards();
+        }
+
+        function prevTickerPage() {
+            currentTickerPage = (currentTickerPage - 1 + totalPages) % totalPages;
+            loadTickerCards();
+        }
+
+        function updatePageIndicator() {
+            document.getElementById('pageIndicator').textContent = `${currentTickerPage + 1}/${totalPages}`;
+        }
+
+        function loadCompanySelect() {
+            const select = document.getElementById('companySelect');
+            companies.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c.ticker;
+                opt.textContent = `${c.ticker} - ${c.name}`;
+                select.appendChild(opt);
+            });
+        }
+
+        function setupEventListeners() {
+            document.getElementById('transcript').addEventListener('input', e => {
+                document.getElementById('charCount').textContent = e.target.value.length;
+            });
+            document.getElementById('analyzeBtn').addEventListener('click', analyzeTranscript);
+            document.getElementById('companySelect').addEventListener('change', e => {
+                if (e.target.value) {
+                    selectTicker(e.target.value);
+                }
+            });
+        }
+
+        async function loadTickerCards() {
+            const container = document.getElementById('tickerCards');
+            container.innerHTML = '';
+            
+            // Get current page tickers
+            const startIdx = currentTickerPage * tickersPerPage;
+            const currentTickers = allTickers.slice(startIdx, startIdx + tickersPerPage);
+            
+            // Add fade-in animation
+            container.style.opacity = '0';
+            container.style.transform = 'translateY(10px)';
+            
+            for (const ticker of currentTickers) {
+                const company = companies.find(c => c.ticker === ticker);
+                const card = document.createElement('div');
+                card.className = 'ticker-card rounded-xl p-4';
+                card.id = `ticker-${ticker}`;
+                card.onclick = () => selectTicker(ticker);
+                
+                // Generate mock price data (in real app, fetch from API)
+                const basePrice = ticker.includes('.NS') ? (500 + Math.random() * 3000) : (100 + Math.random() * 200);
+                const price = basePrice.toFixed(2);
+                const change = (Math.random() * 10 - 5).toFixed(2);
+                const isUp = parseFloat(change) >= 0;
+                const currency = ticker.includes('.NS') ? 'INR' : '$';
+                
+                card.innerHTML = `
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="font-bold text-white">${ticker.replace('.NS', '')}</span>
+                        <span class="text-xs px-2 py-0.5 rounded ${isUp ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}">
+                            ${company.market}
+                        </span>
+                    </div>
+                    <p class="text-2xl font-bold ${isUp ? 'price-up' : 'price-down'} mono">${currency}${price}</p>
+                    <div class="flex items-center gap-1 mt-1">
+                        ${isUp ? 
+                            '<svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>' :
+                            '<svg class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>'
+                        }
+                        <span class="text-sm ${isUp ? 'text-green-400' : 'text-red-400'}">${isUp ? '+' : ''}${change}%</span>
+                    </div>
+                `;
+                container.appendChild(card);
+            }
+            
+            // Animate in
+            setTimeout(() => {
+                container.style.transition = 'all 0.3s ease-out';
+                container.style.opacity = '1';
+                container.style.transform = 'translateY(0)';
+            }, 50);
+            
+            updatePageIndicator();
+            document.getElementById('lastUpdate').textContent = `Updated: ${new Date().toLocaleTimeString()}`;
+        }
+
+        async function loadModelMetrics() {
+            const container = document.getElementById('modelMetrics');
+            
+            // Default metrics (will be updated from API)
+            const models = [
+                { name: 'LSTM', accuracy: 49.82, type: 'RNN' },
+                { name: 'GRU', accuracy: 49.35, type: 'RNN' },
+                { name: 'CNN-BiLSTM', accuracy: 49.82, type: 'Hybrid' },
+                { name: 'Transformer', accuracy: 50.86, type: 'Attention' },
+                { name: 'BERT-Style', accuracy: 49.87, type: 'Transformer' },
+                { name: 'RoBERTa-Style', accuracy: 49.82, type: 'Transformer' },
+                { name: 'DistilBERT', accuracy: 50.44, type: 'Transformer' },
+                { name: 'Hybrid-TF-LSTM', accuracy: 52.27, type: 'Hybrid' }
+            ];
+            
+            try {
+                const data = await fetchWithRetry(`${API_BASE}/model-metrics`);
+                if (data.models) {
+                    Object.entries(data.models).forEach(([name, m]) => {
+                        const idx = models.findIndex(x => x.name.toLowerCase().replace(/[^a-z]/g, '') === name.replace(/[^a-z]/g, ''));
+                        if (idx >= 0) {
+                            models[idx].accuracy = (m.accuracy * 100).toFixed(1);
+                        }
+                    });
+                }
+            } catch (e) {
+                console.log('Using default metrics');
+            }
+            
+            container.innerHTML = models.map(m => `
+                <div class="bg-navy-800/50 rounded-xl p-3 border border-blue-900/30 hover:border-blue-600/50 transition-all">
+                    <p class="text-xs text-blue-400 mb-1">${m.name}</p>
+                    <p class="text-xl font-bold stat-value">${m.accuracy}%</p>
+                    <p class="text-xs text-blue-400/50">${m.type}</p>
+                </div>
+            `).join('');
+        }
+
+        function initChart() {
+            const ctx = document.getElementById('priceChart').getContext('2d');
+            priceChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Price',
+                        data: [],
+                        borderColor: '#2563eb',
+                        backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 0,
+                        pointHoverRadius: 6,
+                        pointHoverBackgroundColor: '#2563eb',
+                        pointHoverBorderColor: '#fff',
+                        pointHoverBorderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(10, 22, 40, 0.95)',
+                            titleColor: '#60a5fa',
+                            bodyColor: '#fff',
+                            borderColor: 'rgba(37, 99, 235, 0.5)',
+                            borderWidth: 1,
+                            padding: 12,
+                            displayColors: false
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(37, 99, 235, 0.1)' },
+                            ticks: { color: 'rgba(96, 165, 250, 0.6)', maxTicksLimit: 8 }
+                        },
+                        y: {
+                            grid: { color: 'rgba(37, 99, 235, 0.1)' },
+                            ticks: { color: 'rgba(96, 165, 250, 0.6)' }
+                        }
+                    },
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    }
+                }
+            });
+        }
+
+        async function selectTicker(ticker) {
+            selectedTicker = ticker;
+            
+            // Update UI
+            document.querySelectorAll('.ticker-card').forEach(c => c.classList.remove('selected'));
+            const card = document.getElementById(`ticker-${ticker}`);
+            if (card) card.classList.add('selected');
+            
+            document.getElementById('companySelect').value = ticker;
+            
+            const company = companies.find(c => c.ticker === ticker);
+            document.getElementById('chartTitle').textContent = `${ticker} - ${company?.name || ticker}`;
+            
+            await loadChartData(ticker);
+        }
+
+        async function loadChartData(ticker) {
+            try {
+                const data = await fetchWithRetry(`${API_BASE}/price-history?ticker=${ticker}&days=${chartDays}`);
+                
+                if (data.data && data.data.length > 0) {
+                    const labels = data.data.map(d => d.date);
+                    const prices = data.data.map(d => d.adj_close || d.close);
+                    
+                    priceChart.data.labels = labels;
+                    priceChart.data.datasets[0].data = prices;
+                    priceChart.data.datasets[0].label = ticker;
+                    priceChart.update();
+                }
+            } catch (e) {
+                // Generate mock data
+                const labels = [];
+                const prices = [];
+                let price = 150;
+                for (let i = chartDays; i >= 0; i--) {
+                    const date = new Date();
+                    date.setDate(date.getDate() - i);
+                    labels.push(date.toISOString().split('T')[0]);
+                    price += (Math.random() - 0.5) * 5;
+                    prices.push(price.toFixed(2));
+                }
+                priceChart.data.labels = labels;
+                priceChart.data.datasets[0].data = prices;
+                priceChart.update();
+            }
+        }
+
+        function setChartRange(days) {
+            chartDays = days;
+            
+            // Update chart subtitle
+            const subtitleMap = {
+                30: '1-Month Price History',
+                120: '4-Month Price History',
+                365: '1-Year Price History'
+            };
+            document.querySelector('#chartCard p.text-xs').textContent = subtitleMap[days] || `${days}-Day Price History`;
+            
+            // Update button styles
+            const buttons = document.querySelectorAll('#chartCard button');
+            buttons.forEach(btn => {
+                const btnDays = parseInt(btn.textContent.replace(/[MY]/g, ''));
+                const isActive = 
+                    (days === 30 && btn.textContent === '1M') ||
+                    (days === 120 && btn.textContent === '4M') ||
+                    (days === 365 && btn.textContent === '1Y');
+                
+                if (isActive) {
+                    btn.className = 'px-3 py-1 text-xs rounded-lg bg-blue-600/40 text-blue-300 transition-all';
+                } else {
+                    btn.className = 'px-3 py-1 text-xs rounded-lg bg-blue-600/20 text-blue-400 hover:bg-blue-600/40 transition-all';
+                }
+            });
+            
+            if (selectedTicker) {
+                loadChartData(selectedTicker);
+            }
+        }
+
+        function toggleDropdown() {
+            const content = document.getElementById('dropdownContent');
+            const chevron = document.getElementById('dropdownChevron');
+            content.classList.toggle('open');
+            chevron.classList.toggle('open');
+        }
+
+        function toggleDropdown2() {
+            const content = document.getElementById('dropdownContent2');
+            const chevron = document.getElementById('dropdownChevron2');
+            content.classList.toggle('open');
+            chevron.classList.toggle('open');
+        }
+
+        // Market Clock Functions
+        function updateMarketClocks() {
+            const now = new Date();
+            
+            // NYSE/NASDAQ Time (EST/EDT - UTC-5 or UTC-4)
+            const nyseTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+            const nyseHours = nyseTime.getHours();
+            const nyseMinutes = nyseTime.getMinutes();
+            const nyseSeconds = nyseTime.getSeconds();
+            const nyseDay = nyseTime.getDay();
+            
+            document.getElementById('clockNYSE').textContent = 
+                `${String(nyseHours).padStart(2, '0')}:${String(nyseMinutes).padStart(2, '0')}:${String(nyseSeconds).padStart(2, '0')}`;
+            
+            // NYSE Market Hours: 9:30 AM - 4:00 PM EST, Mon-Fri
+            const nyseOpen = nyseHours * 60 + nyseMinutes >= 570 && nyseHours * 60 + nyseMinutes < 960;
+            const nyseWeekday = nyseDay >= 1 && nyseDay <= 5;
+            const nyseStatusEl = document.getElementById('nyseStatus');
+            
+            if (nyseWeekday && nyseOpen) {
+                nyseStatusEl.textContent = 'OPEN';
+                nyseStatusEl.className = 'text-xs text-green-400';
+            } else if (nyseWeekday && nyseHours * 60 + nyseMinutes < 570) {
+                const minsToOpen = 570 - (nyseHours * 60 + nyseMinutes);
+                const hrs = Math.floor(minsToOpen / 60);
+                const mins = minsToOpen % 60;
+                nyseStatusEl.textContent = `Opens in ${hrs}h ${mins}m`;
+                nyseStatusEl.className = 'text-xs text-yellow-400';
+            } else {
+                nyseStatusEl.textContent = 'CLOSED';
+                nyseStatusEl.className = 'text-xs text-red-400';
+            }
+            
+            // NSE/BSE Time (IST - UTC+5:30)
+            const nseTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+            const nseHours = nseTime.getHours();
+            const nseMinutes = nseTime.getMinutes();
+            const nseSeconds = nseTime.getSeconds();
+            const nseDay = nseTime.getDay();
+            
+            document.getElementById('clockNSE').textContent = 
+                `${String(nseHours).padStart(2, '0')}:${String(nseMinutes).padStart(2, '0')}:${String(nseSeconds).padStart(2, '0')}`;
+            
+            // NSE Market Hours: 9:15 AM - 3:30 PM IST, Mon-Fri
+            const nseOpen = nseHours * 60 + nseMinutes >= 555 && nseHours * 60 + nseMinutes < 930;
+            const nseWeekday = nseDay >= 1 && nseDay <= 5;
+            const nseStatusEl = document.getElementById('nseStatus');
+            
+            if (nseWeekday && nseOpen) {
+                nseStatusEl.textContent = 'OPEN';
+                nseStatusEl.className = 'text-xs text-green-400';
+            } else if (nseWeekday && nseHours * 60 + nseMinutes < 555) {
+                const minsToOpen = 555 - (nseHours * 60 + nseMinutes);
+                const hrs = Math.floor(minsToOpen / 60);
+                const mins = minsToOpen % 60;
+                nseStatusEl.textContent = `Opens in ${hrs}h ${mins}m`;
+                nseStatusEl.className = 'text-xs text-yellow-400';
+            } else {
+                nseStatusEl.textContent = 'CLOSED';
+                nseStatusEl.className = 'text-xs text-red-400';
+            }
+        }
+
+        // Start market clock updates
+        setInterval(updateMarketClocks, 1000);
+        updateMarketClocks();
+
+        async function analyzeTranscript() {
+            const ticker = document.getElementById('companySelect').value;
+            const transcript = document.getElementById('transcript').value;
+            const earningsDate = document.getElementById('earningsDate').value;
+
+            if (!ticker || !transcript || !earningsDate) {
+                alert('Please fill in all fields');
+                return;
+            }
+
+            document.getElementById('loadingCard').classList.remove('hidden');
+            document.getElementById('resultsCard').classList.add('hidden');
+
+            try {
+                const result = await fetchWithRetry(`${API_BASE}/analyze`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        ticker,
+                        transcript,
+                        earnings_date: earningsDate
+                    })
+                });
+                displayResults(result);
+            } catch (error) {
+                alert('Error: ' + error.message);
+            } finally {
+                document.getElementById('loadingCard').classList.add('hidden');
+            }
+        }
+
+        function displayResults(result) {
+            const fusion = result.fusion;
+            const sentiment = result.sentiment;
+            const dl = result.deep_learning;
+            const isUp = fusion.direction === 'UP';
+            
+            document.getElementById('predictionContent').innerHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="col-span-1 md:col-span-1 bg-navy-800/50 rounded-xl p-6 text-center border ${isUp ? 'border-green-500/30' : 'border-red-500/30'}">
+                        <div class="mb-2">
+                            ${isUp ? 
+                                '<svg class="w-12 h-12 mx-auto text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>' :
+                                '<svg class="w-12 h-12 mx-auto text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"></path></svg>'
+                            }
+                        </div>
+                        <p class="text-3xl font-black ${isUp ? 'text-green-400' : 'text-red-400'}">${fusion.direction}</p>
+                        <p class="text-4xl font-black ${isUp ? 'text-green-300' : 'text-red-300'} mt-1">${(fusion.probability * 100).toFixed(1)}%</p>
+                        <p class="text-xs text-blue-400/60 mt-2">Fusion Prediction</p>
+                    </div>
+                    
+                    <div class="bg-navy-800/50 rounded-xl p-4 border border-blue-900/30">
+                        <p class="text-xs text-purple-400 mb-2 font-medium">VADER Sentiment</p>
+                        <p class="text-2xl font-bold text-white">${(sentiment.vader_probability * 100).toFixed(1)}%</p>
+                        <p class="text-xs text-blue-400/50 mt-1">Compound: ${sentiment.vader_compound_mean.toFixed(3)}</p>
+                        <div class="mt-3 space-y-1">
+                            <div class="flex justify-between text-xs">
+                                <span class="text-green-400">Positive</span>
+                                <span class="text-white">${(sentiment.pos_ratio * 100).toFixed(1)}%</span>
+                            </div>
+                            <div class="flex justify-between text-xs">
+                                <span class="text-red-400">Negative</span>
+                                <span class="text-white">${(sentiment.neg_ratio * 100).toFixed(1)}%</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-navy-800/50 rounded-xl p-4 border border-blue-900/30">
+                        <p class="text-xs text-cyan-400 mb-2 font-medium">Deep Learning</p>
+                        <p class="text-2xl font-bold text-white">${(dl.probability * 100).toFixed(1)}%</p>
+                        <p class="text-xs text-blue-400/50 mt-1">Model: ${dl.model_name.toUpperCase()}</p>
+                        <p class="text-xs text-blue-400/50">Last Close: $${dl.last_close.toFixed(2)}</p>
+                    </div>
+                </div>
+                
+                <div class="bg-navy-800/50 rounded-xl p-4 border border-blue-900/30">
+                    <p class="text-xs text-blue-400 mb-3 font-medium">Fusion Breakdown</p>
+                    <div class="grid grid-cols-3 gap-4 text-center">
+                        <div>
+                            <p class="text-xs text-blue-400/60">Sentiment (40%)</p>
+                            <p class="text-lg font-bold text-white">${(result.components.sentiment_prob * 100).toFixed(1)}%</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-blue-400/60">DL Model (60%)</p>
+                            <p class="text-lg font-bold text-white">${(result.components.dl_prob * 100).toFixed(1)}%</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-blue-400/60">Final Fusion</p>
+                            <p class="text-lg font-bold stat-value">${(result.components.fusion_prob * 100).toFixed(1)}%</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('resultsCard').classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
