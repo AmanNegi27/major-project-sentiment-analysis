@@ -2,7 +2,6 @@
 
 ## Phase II - Deep Learning Models
 
-**Developed by: Homi Shivanshu Purbey**
 
 ---
 
