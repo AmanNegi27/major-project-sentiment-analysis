@@ -153,9 +153,3 @@ Major_Project_Phase2/
 
 ---
 
-## Credits
-
-**Developed by:** Homi Shivanshu Purbey
-
-**Project:** Sentiment Analysis of Corporate Earning Calls for Stock Price Direction Prediction  
-**Phase:** II - Deep Learning Models
